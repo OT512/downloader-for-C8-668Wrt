@@ -1,0 +1,96 @@
+name: Build Download Cache
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag name'
+        required: true
+        default: 'dl-cache-latest'
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y git wget curl xz-utils unzip build-essential \
+            libncurses5-dev zlib1g-dev gawk gettext libssl-dev xsltproc rsync
+
+      - name: Checkout ImmortalWrt
+        run: |
+          git clone https://github.com/OT512/immortalwrt.git openwrt
+          cd openwrt
+          git checkout refs/tags/c8668-locked
+
+      - name: Update and lock feeds
+        run: |
+          cp feeds.conf.default openwrt/feeds.conf.default
+          cd openwrt
+          ./scripts/feeds update -a 2>&1 | tee ../feeds-update.log || true
+
+          # 通过 fork 仓库的 tag 精准定位，永久可达
+          git -C feeds/packages  fetch https://github.com/OT512/packages.git  refs/tags/c8668-locked
+          git -C feeds/packages  checkout FETCH_HEAD
+
+          git -C feeds/luci      fetch https://github.com/OT512/luci.git      refs/tags/c8668-locked
+          git -C feeds/luci      checkout FETCH_HEAD
+
+          git -C feeds/routing   fetch https://github.com/OT512/routing.git   refs/tags/c8668-locked
+          git -C feeds/routing   checkout FETCH_HEAD
+
+          git -C feeds/telephony fetch https://github.com/OT512/telephony.git refs/tags/c8668-locked
+          git -C feeds/telephony checkout FETCH_HEAD
+
+          git -C feeds/istore    fetch https://github.com/OT512/istore.git    refs/tags/c8668-locked
+          git -C feeds/istore    checkout FETCH_HEAD
+
+          ./scripts/feeds install -a 2>&1 | tee ../feeds-install.log || true
+
+      - name: Upload feeds logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: feeds-logs
+          path: |
+            feeds-update.log
+            feeds-install.log
+
+      - name: Apply patch and copy files
+        run: |
+          cd openwrt
+          git apply ../c8668.patch
+          cp ../mt7981-nradio-common.dtsi     target/linux/mediatek/dts/
+          cp ../mt7981-nradio-emmc-2nd.dtsi   target/linux/mediatek/dts/
+          cp ../mt7981b-nradio-c8-668-2nd.dts target/linux/mediatek/dts/
+          cp ../c8668.config .config
+
+      - name: Download all packages
+        run: |
+          cd openwrt
+          make download -j8 IGNORE_ERRORS=1 2>&1 | tee ../download.log || true
+          grep -E "ERROR|Wrong hash|No more mirrors" ../download.log > ../download-errors.log || true
+
+      - name: Upload download logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: download-logs
+          path: |
+            download.log
+            download-errors.log
+
+      - name: Package and release
+        run: |
+          echo "Files: $(ls openwrt/dl/ | wc -l), Size: $(du -sh openwrt/dl/ | cut -f1)"
+          tar -czf dl-cache.tar.gz -C openwrt dl/
+          ls -lh dl-cache.tar.gz
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: "DL Cache ${{ github.event.inputs.release_tag }}"
+          files: dl-cache.tar.gz
+          token: ${{ secrets.GITHUB_TOKEN }}
