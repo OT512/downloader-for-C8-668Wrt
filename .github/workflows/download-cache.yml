@@ -32,13 +32,21 @@ jobs:
         run: |
           cp feeds.conf.default openwrt/feeds.conf.default
           cd openwrt
-          ./scripts/feeds update -a 2>&1
-          ./scripts/feeds install -a 2>&1 || (echo "feeds install failed, continuing..." && true)
+          ./scripts/feeds update -a 2>&1 | tee ../feeds-update.log || true
+          ./scripts/feeds install -a 2>&1 | tee ../feeds-install.log || true
+
+      - name: Upload feeds logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: feeds-logs
+          path: |
+            feeds-update.log
+            feeds-install.log
 
       - name: Apply patch and copy files
         run: |
           cd openwrt
-          git apply ../c8668.patch || true
+          git apply ../c8668.patch 2>&1 || true
           cp ../mt7981-nradio-common.dtsi     target/linux/mediatek/dts/
           cp ../mt7981-nradio-emmc-2nd.dtsi   target/linux/mediatek/dts/
           cp ../mt7981b-nradio-c8-668-2nd.dts target/linux/mediatek/dts/
@@ -47,21 +55,22 @@ jobs:
       - name: Download all packages
         run: |
           cd openwrt
-          make download -j8 IGNORE_ERRORS=1 2>&1 | tee download.log || true
-          grep -E "ERROR|Wrong hash|No more mirrors" download.log > download-errors.log || true
+          make download -j8 IGNORE_ERRORS=1 2>&1 | tee ../download.log || true
+          grep -E "ERROR|Wrong hash|No more mirrors" ../download.log > ../download-errors.log || true
+
+      - name: Upload download logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: download-logs
+          path: |
+            download.log
+            download-errors.log
 
       - name: Package and release
         run: |
           echo "Files: $(ls openwrt/dl/ | wc -l), Size: $(du -sh openwrt/dl/ | cut -f1)"
           tar -czf dl-cache.tar.gz -C openwrt dl/
           ls -lh dl-cache.tar.gz
-
-      - name: Upload error log
-        uses: actions/upload-artifact@v4
-        with:
-          name: download-errors
-          path: openwrt/download-errors.log
-          if-no-files-found: ignore
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
