@@ -1,0 +1,99 @@
+name: Build Download Cache
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag name (e.g. dl-cache-20260210)'
+        required: true
+        default: 'dl-cache-latest'
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential clang flex bison g++ gawk gcc-multilib \
+            gettext git libncurses-dev libssl-dev python3-distutils \
+            rsync unzip zlib1g-dev file wget curl xz-utils
+
+      - name: Checkout ImmortalWrt
+        run: |
+          git clone https://github.com/immortalwrt/immortalwrt.git openwrt
+          cd openwrt
+          git checkout 3a53d6c
+
+      - name: Apply feeds.conf
+        run: |
+          cp feeds.conf.default openwrt/feeds.conf.default
+
+      - name: Update & install feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Apply patch
+        run: |
+          cd openwrt
+          git apply ../c8668.patch || true
+
+      - name: Copy DTS files
+        run: |
+          cp mt7981-nradio-common.dtsi     openwrt/target/linux/mediatek/dts/
+          cp mt7981-nradio-emmc-2nd.dtsi   openwrt/target/linux/mediatek/dts/
+          cp mt7981b-nradio-c8-668-2nd.dts openwrt/target/linux/mediatek/dts/
+
+      - name: Apply config
+        run: |
+          cp c8668.config openwrt/.config
+          cd openwrt
+          make defconfig
+
+      - name: Download all packages
+        run: |
+          cd openwrt
+          make download -j8 V=s 2>&1 | tee download.log || true
+          grep -E "ERROR|failed|Wrong hash|No more mirrors" download.log > download-errors.log || true
+          echo "=== Download errors ==="
+          cat download-errors.log || echo "No errors"
+
+      - name: Show dl directory stats
+        run: |
+          echo "Total files: $(ls openwrt/dl/ | wc -l)"
+          du -sh openwrt/dl/
+
+      - name: Package dl directory
+        run: |
+          tar -czf dl-cache.tar.gz -C openwrt dl/
+          ls -lh dl-cache.tar.gz
+
+      - name: Upload error log as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: download-errors
+          path: openwrt/download-errors.log
+          if-no-files-found: ignore
+
+      - name: Create Release and upload cache
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: "DL Cache ${{ github.event.inputs.release_tag }}"
+          body: |
+            ImmortalWrt download cache for C8-668
+            - ImmortalWrt commit: 3a53d6c
+            - packages: ec83425afb8db6f6de1eb53b968a104ff3d06e7f
+            - luci: bdf571c0ea5b9b029707787e0f89be7bbd3d75e3
+            - routing: a4a02e700e7840ba0d01cc5677a36257864291c8
+            - istore: a4a02e700e7840ba0d01cc5677a36257864291c8
+          files: dl-cache.tar.gz
+          token: ${{ secrets.GITHUB_TOKEN }}
