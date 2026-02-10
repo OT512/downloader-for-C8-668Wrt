@@ -33,6 +33,9 @@ jobs:
           cp feeds.conf.default openwrt/feeds.conf.default
           cd openwrt
           ./scripts/feeds update -a 2>&1 | tee ../feeds-update.log || true
+          git -C feeds/packages checkout eece895669b93547f677b1e84e5658097b378051
+          git -C feeds/luci     checkout 9bf025f829806b3a0c4f826359f1f0a0c46c5598
+          git -C feeds/routing  checkout 342a9a5f700438186714249a5b3a8868673a9032
           ./scripts/feeds install -a 2>&1 | tee ../feeds-install.log || true
 
       - name: Upload feeds logs

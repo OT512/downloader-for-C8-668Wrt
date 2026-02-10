@@ -1,4 +1,4 @@
-src-git packages https://github.com/immortalwrt/packages.git;ec83425afb8db6f6de1eb53b968a104ff3d06e7f
-src-git luci https://github.com/immortalwrt/luci.git;bdf571c0ea5b9b029707787e0f89be7bbd3d75e3
-src-git routing https://github.com/openwrt/routing.git;a4a02e700e7840ba0d01cc5677a36257864291c8
-src-git istore https://github.com/linkease/istore.git;a4a02e700e7840ba0d01cc5677a36257864291c8
+src-git packages https://github.com/immortalwrt/packages.git;openwrt-23.05
+src-git luci https://github.com/immortalwrt/luci.git;openwrt-23.05
+src-git routing https://github.com/openwrt/routing.git;openwrt-23.05
+src-git istore https://github.com/linkease/istore.git;main
