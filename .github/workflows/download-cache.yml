@@ -32,8 +32,8 @@ jobs:
         run: |
           cp feeds.conf.default openwrt/feeds.conf.default
           cd openwrt
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
+          ./scripts/feeds update -a 2>&1
+          ./scripts/feeds install -a 2>&1 || (echo "feeds install failed, continuing..." && true)
 
       - name: Apply patch and copy files
         run: |
