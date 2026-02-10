@@ -46,7 +46,7 @@ jobs:
       - name: Apply patch and copy files
         run: |
           cd openwrt
-          git apply ../c8668.patch 2>&1 || true
+          git apply ../c8668.patch
           cp ../mt7981-nradio-common.dtsi     target/linux/mediatek/dts/
           cp ../mt7981-nradio-emmc-2nd.dtsi   target/linux/mediatek/dts/
           cp ../mt7981b-nradio-c8-668-2nd.dts target/linux/mediatek/dts/
